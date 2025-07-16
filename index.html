@@ -1,18 +1,24 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Stock Watchlist</title>
+  <meta charset="UTF-8">
+  <title>📈 Stock Watchlist Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { font-family: Arial; padding: 20px; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
-    input, button { margin: 10px 0; }
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f8f9fa; }
+    h1 { font-size: 28px; }
+    input, button { margin: 10px 5px; padding: 8px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: center; }
+    th { background-color: #e9ecef; }
+    canvas { margin-top: 20px; }
   </style>
 </head>
 <body>
-  <h1>📈 My Stock Watchlist</h1>
+  <h1>📊 Stock Watchlist</h1>
   <input id="symbolInput" placeholder="Enter stock symbol" />
-  <button onclick="addSymbol()">Add</button>
+  <button onclick="addSymbol()">Add to Watchlist</button>
+  
   <table id="stockTable">
     <thead>
       <tr>
@@ -26,7 +32,13 @@
     </thead>
     <tbody></tbody>
   </table>
+
+  <canvas id="stockChart" width="800" height="400"></canvas>
+
   <script>
+    let priceHistory = {};
+    const defaultSymbol = "AAPL";  // Change this to any symbol you want to chart
+
     async function loadWatchlist() {
       const res = await fetch("/api/watchlist");
       const symbols = await res.json();
@@ -34,30 +46,31 @@
       tbody.innerHTML = "";
 
       for (const symbol of symbols) {
-        const quoteRes = await fetch(`/api/quote/${symbol}`);
-        const q = await quoteRes.json();
-        if (!q || !q.symbol) continue;
+        const quote = await fetchQuote(symbol);
+        if (!quote || !quote.symbol) continue;
+
         tbody.innerHTML += `
           <tr>
-            <td>${q.symbol}</td>
-            <td>${q.price.toFixed(2)}</td>
-            <td>${q.change.toFixed(2)}</td>
-            <td>${q.change_perc}</td>
-            <td>${q.time}</td>
-            <td><button onclick="removeSymbol('${q.symbol}')">Remove</button></td>
+            <td>${quote.symbol}</td>
+            <td>${quote.price.toFixed(2)}</td>
+            <td>${quote.change.toFixed(2)}</td>
+            <td>${quote.change_perc}</td>
+            <td>${quote.time}</td>
+            <td><button onclick="removeSymbol('${quote.symbol}')">Remove</button></td>
           </tr>`;
       }
     }
 
     async function addSymbol() {
-      const symbol = document.getElementById("symbolInput").value;
+      const input = document.getElementById("symbolInput");
+      const symbol = input.value.trim().toUpperCase();
       if (!symbol) return;
       await fetch("/api/watchlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ symbol })
       });
-      document.getElementById("symbolInput").value = "";
+      input.value = "";
       loadWatchlist();
     }
 
@@ -65,6 +78,53 @@
       await fetch(`/api/watchlist/${symbol}`, { method: "DELETE" });
       loadWatchlist();
     }
+
+    async function fetchQuote(symbol) {
+      const res = await fetch(`/api/quote/${symbol}`);
+      const data = await res.json();
+      if (!data || !data.symbol) return null;
+
+      if (!priceHistory[symbol]) priceHistory[symbol] = [];
+      priceHistory[symbol].push({ time: data.time, price: data.price });
+
+      return data;
+    }
+
+    function drawChart(symbol) {
+      const ctx = document.getElementById("stockChart").getContext("2d");
+      const history = priceHistory[symbol];
+      if (!history || history.length < 2) return;
+
+      const labels = history.map(p => p.time);
+      const data = history.map(p => p.price);
+
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: `${symbol} Price`,
+            data: data,
+            borderColor: "rgba(75, 192, 192, 1)",
+            backgroundColor: "rgba(75, 192, 192, 0.1)",
+            fill: true,
+            tension: 0.2
+          }]
+        },
+        options: {
+          animation: { duration: 500 },
+          responsive: true,
+          scales: {
+            y: { beginAtZero: false }
+          }
+        }
+      });
+    }
+
+    setInterval(async () => {
+      await fetchQuote(defaultSymbol);
+      drawChart(defaultSymbol);
+    }, 15000);  // update every 15 seconds
 
     loadWatchlist();
   </script>
