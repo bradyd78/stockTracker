@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Stock Watchlist</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    input, button { margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>📈 My Stock Watchlist</h1>
+  <input id="symbolInput" placeholder="Enter stock symbol" />
+  <button onclick="addSymbol()">Add</button>
+  <table id="stockTable">
+    <thead>
+      <tr>
+        <th>Symbol</th>
+        <th>Price</th>
+        <th>Change</th>
+        <th>% Change</th>
+        <th>Time</th>
+        <th>Remove</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <script>
+    async function loadWatchlist() {
+      const res = await fetch("/api/watchlist");
+      const symbols = await res.json();
+      const tbody = document.querySelector("#stockTable tbody");
+      tbody.innerHTML = "";
+
+      for (const symbol of symbols) {
+        const quoteRes = await fetch(`/api/quote/${symbol}`);
+        const q = await quoteRes.json();
+        if (!q || !q.symbol) continue;
+        tbody.innerHTML += `
+          <tr>
+            <td>${q.symbol}</td>
+            <td>${q.price.toFixed(2)}</td>
+            <td>${q.change.toFixed(2)}</td>
+            <td>${q.change_perc}</td>
+            <td>${q.time}</td>
+            <td><button onclick="removeSymbol('${q.symbol}')">Remove</button></td>
+          </tr>`;
+      }
+    }
+
+    async function addSymbol() {
+      const symbol = document.getElementById("symbolInput").value;
+      if (!symbol) return;
+      await fetch("/api/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol })
+      });
+      document.getElementById("symbolInput").value = "";
+      loadWatchlist();
+    }
+
+    async function removeSymbol(symbol) {
+      await fetch(`/api/watchlist/${symbol}`, { method: "DELETE" });
+      loadWatchlist();
+    }
+
+    loadWatchlist();
+  </script>
+</body>
+</html>
